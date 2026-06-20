@@ -361,7 +361,6 @@
             font-weight: 600;
         }
 
-        /* SYSTEM AUTHENTICATION OVERLAY - minimal, just a transparent overlay */
         .auth-overlay {
             display: none;
             position: fixed;
@@ -434,17 +433,6 @@
         }
 
         .auth-error.visible {
-            display: block;
-        }
-
-        .auth-status {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.8rem;
-            margin-top: 12px;
-            display: none;
-        }
-
-        .auth-status.visible {
             display: block;
         }
 
@@ -533,19 +521,27 @@
 
     <div class="spacer"></div>
 
+    <!-- Authentication Overlay -->
     <div class="auth-overlay" id="authOverlay">
-        <div class="auth-box">
-            <h2>Authentication Required</h2>
-            <p class="subtitle">Please authenticate with your system credentials</p>
-            <button class="btn btn-primary" onclick="authenticateWithSystem()">
-                <ion-icon name="finger-print-outline"></ion-icon>
-                Use System Authentication
-            </button>
-            <button class="btn btn-secondary" onclick="fallbackAuth()">
-                Use Password
-            </button>
+        <div class="auth-box" id="authBox">
+            <h2 id="authTitle">Wallet Access</h2>
+            <p class="subtitle" id="authSubtitle">Enter your password to continue</p>
+            <div style="display: none;" id="authLoading">
+                <div class="loading-spinner" style="margin: 0 auto;"></div>
+                <p style="color: rgba(255,255,255,0.4); margin-top: 12px;">Retrieving saved password...</p>
+            </div>
+            <div id="authForm">
+                <input type="password" id="authPassword" placeholder="Enter your password" style="width:100%; padding:14px 16px; border-radius:16px; border:1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.25); color:white; font-size:1rem; margin-bottom:16px; transition: border 0.2s;"/>
+                <button class="btn btn-primary" onclick="submitPassword()">
+                    <ion-icon name="lock-open-outline"></ion-icon>
+                    Unlock
+                </button>
+                <button class="btn btn-secondary" onclick="fallbackAuth()">
+                    Use System Authentication
+                </button>
+            </div>
             <div id="authError" class="auth-error"></div>
-            <div id="authStatus" class="auth-status">Waiting for authentication...</div>
+            <div id="authStatus" class="auth-error" style="color: rgba(255,255,255,0.4);"></div>
         </div>
     </div>
 
@@ -669,69 +665,150 @@
         const AUTH_KEY = 'wallet_auth';
         const SESSION_KEY = 'wallet_session';
         const CACHE_KEY = 'wallet_balances_cache';
+        const PASSWORD_CREDENTIAL_ID = 'wallet_password';
 
-        // ----- Real System Authentication (Credential Management API) -----
-        async function authenticateWithSystem() {
-            const errorEl = document.getElementById('authError');
-            const statusEl = document.getElementById('authStatus');
-            
-            errorEl.className = 'auth-error';
-            statusEl.className = 'auth-status visible';
-            statusEl.textContent = 'Opening system credential prompt...';
-
+        // ----- Credential Management API helpers -----
+        async function savePassword(password) {
+            if (!navigator.credentials) return false;
             try {
-                // Check if Credential Management API is available and we're in a secure context
-                if (!navigator.credentials || !window.isSecureContext) {
-                    statusEl.className = 'auth-status';
-                    errorEl.textContent = 'System authentication not available. Please use password.';
-                    errorEl.className = 'auth-error visible';
-                    return;
-                }
+                const credential = new PasswordCredential({
+                    id: PASSWORD_CREDENTIAL_ID,
+                    password: password,
+                    name: 'Wallet Password'
+                });
+                await navigator.credentials.store(credential);
+                return true;
+            } catch (e) {
+                console.warn('Failed to save credential:', e);
+                return false;
+            }
+        }
 
-                // Trigger the system credential prompt (Windows Security / Keychain)
+        async function getSavedPassword() {
+            if (!navigator.credentials) return null;
+            try {
                 const credential = await navigator.credentials.get({
                     password: true,
-                    mediation: 'required'  // Forces the system UI
+                    mediation: 'required'
                 });
-
-                statusEl.className = 'auth-status';
-                if (credential) {
-                    // Success - user authenticated with system
-                    localStorage.setItem(AUTH_KEY, 'authenticated');
-                    localStorage.setItem(SESSION_KEY, Date.now().toString());
-                    document.getElementById('authOverlay').classList.remove('active');
-                    loadDashboard();
-                } else {
-                    errorEl.textContent = 'Authentication cancelled or failed.';
-                    errorEl.className = 'auth-error visible';
+                if (credential && credential.type === 'password') {
+                    return credential.password;
                 }
-            } catch (error) {
-                console.error('System auth error:', error);
-                statusEl.className = 'auth-status';
-                errorEl.textContent = 'System authentication error: ' + (error.message || 'Unknown error');
-                errorEl.className = 'auth-error visible';
-                // Fallback to password
-                setTimeout(() => fallbackAuth(), 1000);
+                return null;
+            } catch (e) {
+                console.warn('Failed to retrieve credential:', e);
+                return null;
             }
         }
 
-        // ----- Fallback: Simple Password Prompt -----
-        function fallbackAuth() {
-            const password = prompt('Enter your wallet password:');
-            if (password === null) return;
+        // ----- Authentication flow -----
+        async function authenticate() {
+            const overlay = document.getElementById('authOverlay');
+            const errorEl = document.getElementById('authError');
+            const statusEl = document.getElementById('authStatus');
+            const formEl = document.getElementById('authForm');
+            const loadingEl = document.getElementById('authLoading');
 
-            if (password.length >= 4) {
+            errorEl.className = 'auth-error';
+            statusEl.className = 'auth-error';
+            formEl.style.display = 'block';
+            loadingEl.style.display = 'none';
+
+            // 1. Check if we have a saved credential
+            const savedPassword = await getSavedPassword();
+            if (savedPassword) {
+                // If we got a password via system prompt, validate it (in this demo, any non-empty is accepted)
+                // In real app, you'd check against stored hash
                 localStorage.setItem(AUTH_KEY, 'authenticated');
                 localStorage.setItem(SESSION_KEY, Date.now().toString());
-                document.getElementById('authOverlay').classList.remove('active');
+                overlay.classList.remove('active');
+                loadDashboard();
+                return;
+            }
+
+            // 2. No saved credential: show the password input form
+            // We'll also offer a "Use System Authentication" button which will trigger the Credential API again
+            // If the user clicks that, it will call getSavedPassword() again with mediation: 'required'
+            // which will show the system prompt if a credential exists.
+            // Since no credential exists, we ask the user to create one.
+            formEl.style.display = 'block';
+            loadingEl.style.display = 'none';
+            document.getElementById('authTitle').textContent = 'Set Wallet Password';
+            document.getElementById('authSubtitle').textContent = 'Create a password to protect your wallet';
+            document.querySelector('.auth-box .btn-primary').textContent = 'Set Password';
+            document.querySelector('.auth-box .btn-secondary').style.display = 'none';
+        }
+
+        async function submitPassword() {
+            const passwordInput = document.getElementById('authPassword');
+            const password = passwordInput.value;
+            const errorEl = document.getElementById('authError');
+            const overlay = document.getElementById('authOverlay');
+            const formEl = document.getElementById('authForm');
+            const loadingEl = document.getElementById('authLoading');
+
+            if (!password || password.length < 4) {
+                errorEl.textContent = 'Please enter a password (minimum 4 characters).';
+                errorEl.className = 'auth-error visible';
+                return;
+            }
+
+            // Save the password using Credential API
+            const saved = await savePassword(password);
+            if (saved) {
+                // Successfully saved; now authenticate
+                localStorage.setItem(AUTH_KEY, 'authenticated');
+                localStorage.setItem(SESSION_KEY, Date.now().toString());
+                overlay.classList.remove('active');
                 loadDashboard();
             } else {
-                alert('Invalid password. Please try again.');
-                setTimeout(() => fallbackAuth(), 500);
+                // Fallback: just store in localStorage (for non-HTTPS or unsupported browsers)
+                localStorage.setItem('wallet_password_hash', btoa(password)); // simple base64 for demo
+                localStorage.setItem(AUTH_KEY, 'authenticated');
+                localStorage.setItem(SESSION_KEY, Date.now().toString());
+                overlay.classList.remove('active');
+                loadDashboard();
             }
         }
 
-        // ----- Check Authentication Status -----
+        // Fallback: use the system credential API to retrieve (this triggers the Windows Security prompt if credential exists)
+        async function fallbackAuth() {
+            const overlay = document.getElementById('authOverlay');
+            const errorEl = document.getElementById('authError');
+            const statusEl = document.getElementById('authStatus');
+            const formEl = document.getElementById('authForm');
+            const loadingEl = document.getElementById('authLoading');
+
+            formEl.style.display = 'none';
+            loadingEl.style.display = 'block';
+            statusEl.textContent = 'Opening system credential prompt...';
+            statusEl.className = 'auth-error visible';
+
+            const credential = await getSavedPassword();
+            loadingEl.style.display = 'none';
+            if (credential) {
+                // Success
+                localStorage.setItem(AUTH_KEY, 'authenticated');
+                localStorage.setItem(SESSION_KEY, Date.now().toString());
+                overlay.classList.remove('active');
+                loadDashboard();
+            } else {
+                // No credential saved, or user cancelled
+                statusEl.textContent = '';
+                statusEl.className = 'auth-error';
+                errorEl.textContent = 'No saved credential found. Please set a password first.';
+                errorEl.className = 'auth-error visible';
+                formEl.style.display = 'block';
+                loadingEl.style.display = 'none';
+                document.querySelector('.auth-box .btn-secondary').style.display = 'block';
+                document.querySelector('.auth-box .btn-secondary').textContent = 'Try System Authentication Again';
+                document.querySelector('.auth-box .btn-primary').textContent = 'Set Password';
+                document.getElementById('authTitle').textContent = 'Set Wallet Password';
+                document.getElementById('authSubtitle').textContent = 'Create a password to protect your wallet';
+                // Reset button actions
+            }
+        }
+
         function checkAuth() {
             const isAuth = localStorage.getItem(AUTH_KEY) === 'authenticated';
             const sessionTime = parseInt(localStorage.getItem(SESSION_KEY)) || 0;
@@ -745,12 +822,11 @@
             }
 
             // Show auth overlay
-            document.getElementById('authOverlay').classList.add('active');
+            const overlay = document.getElementById('authOverlay');
+            overlay.classList.add('active');
 
-            // If system auth is available and we're in secure context, try it automatically
-            if (navigator.credentials && window.isSecureContext) {
-                setTimeout(() => authenticateWithSystem(), 500);
-            }
+            // Try to authenticate
+            authenticate();
             return false;
         }
 
@@ -759,9 +835,20 @@
             localStorage.removeItem(SESSION_KEY);
             document.getElementById('authOverlay').classList.add('active');
             document.getElementById('tableBody').innerHTML = '';
+            // Reset auth overlay
+            document.getElementById('authForm').style.display = 'block';
+            document.getElementById('authLoading').style.display = 'none';
+            document.getElementById('authError').className = 'auth-error';
+            document.getElementById('authStatus').className = 'auth-error';
+            document.querySelector('.auth-box .btn-secondary').style.display = 'block';
+            document.querySelector('.auth-box .btn-secondary').textContent = 'Use System Authentication';
+            document.querySelector('.auth-box .btn-primary').textContent = 'Unlock';
+            document.getElementById('authTitle').textContent = 'Wallet Access';
+            document.getElementById('authSubtitle').textContent = 'Enter your password to continue';
+            authenticate();
         }
 
-        // ----- Wallet Data & Balance Fetching (same as before) -----
+        // ----- Wallet Data & Balance Fetching (unchanged) -----
         function getStoredWallets() {
             try {
                 const data = localStorage.getItem(STORAGE_KEY);
@@ -1068,6 +1155,12 @@
         document.getElementById('modalOverlay').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeModal();
+            }
+        });
+
+        document.getElementById('authPassword').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                submitPassword();
             }
         });
 
