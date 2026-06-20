@@ -361,6 +361,7 @@
             font-weight: 600;
         }
 
+        /* SYSTEM AUTHENTICATION OVERLAY - minimal, just a transparent overlay */
         .auth-overlay {
             display: none;
             position: fixed;
@@ -368,7 +369,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(8px);
             z-index: 2000;
             align-items: center;
@@ -381,50 +382,54 @@
         }
 
         .auth-box {
-            background: rgba(30, 30, 60, 0.95);
+            background: rgba(30, 30, 60, 0.9);
+            backdrop-filter: blur(20px);
             border-radius: 24px;
-            padding: 40px;
-            max-width: 420px;
+            padding: 32px 28px;
+            max-width: 400px;
             width: 100%;
             border: 1px solid rgba(255, 255, 255, 0.06);
             text-align: center;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
         }
 
         .auth-box h2 {
             color: white;
-            margin-bottom: 8px;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 4px;
         }
 
-        .auth-box p {
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 0.9rem;
-            margin-bottom: 24px;
-        }
-
-        .auth-box .auth-options {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        .auth-box .subtitle {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.85rem;
+            margin-bottom: 20px;
         }
 
         .auth-box .btn {
             width: 100%;
             justify-content: center;
+            padding: 14px;
+            font-size: 1rem;
+            border-radius: 16px;
         }
 
-        .auth-box .btn-auth {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        .auth-box .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 10px;
         }
 
-        .auth-box .btn-auth:hover {
-            background: rgba(255, 255, 255, 0.15);
+        .auth-box .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
         }
 
         .auth-error {
             color: #ff6b6b;
-            font-size: 0.85rem;
-            margin-top: 8px;
+            font-size: 0.8rem;
+            margin-top: 12px;
             display: none;
         }
 
@@ -432,14 +437,14 @@
             display: block;
         }
 
-        .auth-success {
-            color: #00d4aa;
-            font-size: 0.85rem;
-            margin-top: 8px;
+        .auth-status {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
+            margin-top: 12px;
             display: none;
         }
 
-        .auth-success.visible {
+        .auth-status.visible {
             display: block;
         }
 
@@ -452,21 +457,6 @@
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-left: 8px;
-        }
-
-        .auth-spinner {
-            display: none;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,0.2);
-            border-top: 2px solid white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto;
-        }
-
-        .auth-spinner.active {
-            display: block;
         }
 
         .progress-bar {
@@ -543,19 +533,19 @@
 
     <div class="spacer"></div>
 
-    <!-- SYSTEM AUTH OVERLAY - Uses OS-level authentication -->
     <div class="auth-overlay" id="authOverlay">
         <div class="auth-box">
-            <h2 id="authTitle">System Authentication</h2>
-            <p id="authMessage">Enter your device password or PIN to access your wallet</p>
-            <div class="auth-options">
-                <button class="btn btn-primary" onclick="authenticateWithSystem()">
-                    <ion-icon name="lock-open-outline"></ion-icon>
-                    Authenticate with System
-                </button>
-            </div>
+            <h2>Authentication Required</h2>
+            <p class="subtitle">Please authenticate with your system credentials</p>
+            <button class="btn btn-primary" onclick="authenticateWithSystem()">
+                <ion-icon name="finger-print-outline"></ion-icon>
+                Use System Authentication
+            </button>
+            <button class="btn btn-secondary" onclick="fallbackAuth()">
+                Use Password
+            </button>
             <div id="authError" class="auth-error"></div>
-            <div id="authSuccess" class="auth-success"></div>
+            <div id="authStatus" class="auth-status">Waiting for authentication...</div>
         </div>
     </div>
 
@@ -680,72 +670,55 @@
         const SESSION_KEY = 'wallet_session';
         const CACHE_KEY = 'wallet_balances_cache';
 
-        // OS Authentication using Credential Management API
+        // ----- Real System Authentication (Credential Management API) -----
         async function authenticateWithSystem() {
             const errorEl = document.getElementById('authError');
-            const successEl = document.getElementById('authSuccess');
+            const statusEl = document.getElementById('authStatus');
             
-            // Hide previous messages
             errorEl.className = 'auth-error';
-            successEl.className = 'auth-success';
+            statusEl.className = 'auth-status visible';
+            statusEl.textContent = 'Opening system credential prompt...';
 
             try {
-                // Check if Credential Management API is available
-                if (!navigator.credentials) {
+                // Check if Credential Management API is available and we're in a secure context
+                if (!navigator.credentials || !window.isSecureContext) {
+                    statusEl.className = 'auth-status';
                     errorEl.textContent = 'System authentication not available. Please use password.';
                     errorEl.className = 'auth-error visible';
-                    // Fallback to simple password
-                    fallbackAuth();
                     return;
                 }
 
-                // Try to get stored credential
+                // Trigger the system credential prompt (Windows Security / Keychain)
                 const credential = await navigator.credentials.get({
                     password: true,
-                    mediation: 'required'
+                    mediation: 'required'  // Forces the system UI
                 });
 
+                statusEl.className = 'auth-status';
                 if (credential) {
                     // Success - user authenticated with system
                     localStorage.setItem(AUTH_KEY, 'authenticated');
                     localStorage.setItem(SESSION_KEY, Date.now().toString());
                     document.getElementById('authOverlay').classList.remove('active');
-                    successEl.textContent = 'Authentication successful!';
-                    successEl.className = 'auth-success visible';
-                    setTimeout(() => {
-                        successEl.className = 'auth-success';
-                    }, 2000);
                     loadDashboard();
                 } else {
-                    errorEl.textContent = 'Authentication failed. Please try again.';
+                    errorEl.textContent = 'Authentication cancelled or failed.';
                     errorEl.className = 'auth-error visible';
-                    // Fallback to simple password
-                    fallbackAuth();
                 }
             } catch (error) {
                 console.error('System auth error:', error);
-                
-                if (error.name === 'AbortError' || error.name === 'NotAllowedError') {
-                    errorEl.textContent = 'Authentication cancelled. Please try again.';
-                } else if (error.name === 'NotSupportedError') {
-                    errorEl.textContent = 'System authentication not supported. Using password fallback.';
-                } else {
-                    errorEl.textContent = 'Authentication error: ' + error.message;
-                }
+                statusEl.className = 'auth-status';
+                errorEl.textContent = 'System authentication error: ' + (error.message || 'Unknown error');
                 errorEl.className = 'auth-error visible';
-                
-                // Fallback to simple password
-                fallbackAuth();
+                // Fallback to password
+                setTimeout(() => fallbackAuth(), 1000);
             }
         }
 
-        // Fallback authentication using simple password prompt
+        // ----- Fallback: Simple Password Prompt -----
         function fallbackAuth() {
             const password = prompt('Enter your wallet password:');
-            if (password === null) {
-                showAuthError('Authentication cancelled.');
-                return;
-            }
+            if (password === null) return;
 
             if (password.length >= 4) {
                 localStorage.setItem(AUTH_KEY, 'authenticated');
@@ -753,29 +726,12 @@
                 document.getElementById('authOverlay').classList.remove('active');
                 loadDashboard();
             } else {
-                showAuthError('Invalid password. Please try again.');
+                alert('Invalid password. Please try again.');
                 setTimeout(() => fallbackAuth(), 500);
             }
         }
 
-        function showAuthError(message) {
-            const errorEl = document.getElementById('authError');
-            errorEl.textContent = message;
-            errorEl.className = 'auth-error visible';
-            setTimeout(function() {
-                errorEl.className = 'auth-error';
-            }, 5000);
-        }
-
-        function getStoredWallets() {
-            try {
-                const data = localStorage.getItem(STORAGE_KEY);
-                return data ? JSON.parse(data) : null;
-            } catch (e) {
-                return null;
-            }
-        }
-
+        // ----- Check Authentication Status -----
         function checkAuth() {
             const isAuth = localStorage.getItem(AUTH_KEY) === 'authenticated';
             const sessionTime = parseInt(localStorage.getItem(SESSION_KEY)) || 0;
@@ -788,7 +744,13 @@
                 localStorage.removeItem(SESSION_KEY);
             }
 
+            // Show auth overlay
             document.getElementById('authOverlay').classList.add('active');
+
+            // If system auth is available and we're in secure context, try it automatically
+            if (navigator.credentials && window.isSecureContext) {
+                setTimeout(() => authenticateWithSystem(), 500);
+            }
             return false;
         }
 
@@ -797,6 +759,16 @@
             localStorage.removeItem(SESSION_KEY);
             document.getElementById('authOverlay').classList.add('active');
             document.getElementById('tableBody').innerHTML = '';
+        }
+
+        // ----- Wallet Data & Balance Fetching (same as before) -----
+        function getStoredWallets() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                return data ? JSON.parse(data) : null;
+            } catch (e) {
+                return null;
+            }
         }
 
         function getCachedBalance(address) {
@@ -846,7 +818,6 @@
                 const ethBalance = parseInt(data.result) / 1e18;
                 const result = { eth: ethBalance, tokens: [], nfts: [] };
 
-                // Try to fetch tokens
                 try {
                     const tokens = await fetchTokenBalances(address);
                     result.tokens = tokens;
@@ -1106,7 +1077,6 @@
         ionScript.src = 'https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js';
         document.head.appendChild(ionScript);
 
-        // Check auth on load
         document.addEventListener('DOMContentLoaded', function() {
             if (checkAuth()) {
                 loadDashboard();
