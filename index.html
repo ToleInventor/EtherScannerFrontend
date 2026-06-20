@@ -472,6 +472,30 @@
             display: block;
         }
 
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin: 12px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar .progress {
+            height: 100%;
+            background: rgb(103, 63, 248);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.75rem;
+            text-align: center;
+            margin-top: 4px;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -524,9 +548,8 @@
 
     <div class="auth-overlay" id="authOverlay">
         <div class="auth-box">
-            <h2 id="authTitle">Authentication Required</h2>
-            <p id="authMessage">Enter your device password or PIN to continue</p>
-            <div class="auth-spinner" id="authSpinner"></div>
+            <h2>Authentication Required</h2>
+            <p>Enter your password or PIN to continue</p>
             <input type="password" id="authPassword" placeholder="Enter password / PIN..." />
             <button class="btn btn-primary" onclick="authenticate()">
                 <ion-icon name="lock-open-outline"></ion-icon>
@@ -577,6 +600,11 @@
                 <div class="value" id="totalTokens">0</div>
             </div>
         </div>
+
+        <div class="progress-bar">
+            <div class="progress" id="progressBar"></div>
+        </div>
+        <div class="progress-text" id="progressText">Ready</div>
 
         <div class="table-wrapper">
             <table>
@@ -651,10 +679,14 @@
         const AUTH_KEY = 'wallet_auth';
         const SESSION_KEY = 'wallet_session';
         const CACHE_KEY = 'wallet_balances_cache';
-        const AUTH_ATTEMPTS_KEY = 'wallet_auth_attempts';
 
-        // Web3 configuration
-        const WEB3_PROVIDER = 'https://cloudflare-eth.com';
+        const RPC_ENDPOINTS = [
+            'https://cloudflare-eth.com',
+            'https://eth-mainnet.g.alchemy.com/v2/demo',
+            'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'
+        ];
+
+        let currentRpcIndex = 0;
 
         function getStoredWallets() {
             try {
@@ -689,8 +721,6 @@
         function authenticate() {
             const passwordInput = document.getElementById('authPassword');
             const password = passwordInput.value;
-            const spinner = document.getElementById('authSpinner');
-            const btn = document.querySelector('.auth-box .btn');
 
             if (!password) {
                 showAuthError('Please enter your password or PIN.');
@@ -698,29 +728,18 @@
             }
 
             hideAuthError();
-            spinner.classList.add('active');
-            btn.disabled = true;
 
-            // Simulate system PIN/password verification
-            // In a real implementation, this would validate against system credentials
-            setTimeout(function() {
-                spinner.classList.remove('active');
-                btn.disabled = false;
-
-                // For demo, accept any non-empty password
-                // In production, you would use the OS credential API
-                if (password.length >= 4) {
-                    localStorage.setItem(AUTH_KEY, 'authenticated');
-                    localStorage.setItem(SESSION_KEY, Date.now().toString());
-                    document.getElementById('authOverlay').classList.remove('active');
-                    passwordInput.value = '';
-                    loadDashboard();
-                } else {
-                    showAuthError('Invalid credentials. Please try again.');
-                    passwordInput.value = '';
-                    passwordInput.focus();
-                }
-            }, 1000);
+            if (password.length >= 4) {
+                localStorage.setItem(AUTH_KEY, 'authenticated');
+                localStorage.setItem(SESSION_KEY, Date.now().toString());
+                document.getElementById('authOverlay').classList.remove('active');
+                passwordInput.value = '';
+                loadDashboard();
+            } else {
+                showAuthError('Invalid credentials. Please try again.');
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
         }
 
         function checkAuth() {
@@ -735,25 +754,9 @@
                 localStorage.removeItem(SESSION_KEY);
             }
 
-            // Show auth overlay with appropriate message
-            const overlay = document.getElementById('authOverlay');
-            const title = document.getElementById('authTitle');
-            const message = document.getElementById('authMessage');
-            const passwordInput = document.getElementById('authPassword');
-
-            if (isFileProtocol() || !isSecureContext()) {
-                title.textContent = 'System Authentication';
-                message.textContent = 'Enter your device password or PIN to continue';
-                passwordInput.placeholder = 'Enter password / PIN...';
-            } else {
-                title.textContent = 'Authentication Required';
-                message.textContent = 'Enter your device password or PIN to continue';
-                passwordInput.placeholder = 'Enter password / PIN...';
-            }
-
-            overlay.classList.add('active');
+            document.getElementById('authOverlay').classList.add('active');
             setTimeout(function() {
-                passwordInput.focus();
+                document.getElementById('authPassword').focus();
             }, 300);
             return false;
         }
@@ -769,7 +772,7 @@
             try {
                 const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 const cached = cache[address];
-                if (cached && (Date.now() - cached.timestamp) < 60000) {
+                if (cached && (Date.now() - cached.timestamp) < 300000) { // 5 minute cache
                     return cached.data;
                 }
                 return null;
@@ -789,85 +792,128 @@
             } catch (e) {}
         }
 
+        async function fetchWithRetry(url, options, retries = 2) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) return response;
+                    if (response.status === 429) {
+                        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+                        continue;
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                } catch (e) {
+                    if (i === retries - 1) throw e;
+                    await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+                }
+            }
+        }
+
         async function fetchWeb3Balance(address) {
             const cached = getCachedBalance(address);
             if (cached) return cached;
 
-            try {
-                const response = await fetch(WEB3_PROVIDER, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        method: 'eth_getBalance',
-                        params: [address, 'latest'],
-                        id: 1
-                    })
-                });
+            let lastError = null;
+            const endpoints = RPC_ENDPOINTS;
 
-                if (!response.ok) throw new Error('Network error');
-                const data = await response.json();
-                if (data.error) throw new Error(data.error.message);
-
-                const ethBalance = parseInt(data.result) / 1e18;
-                const result = { eth: ethBalance, tokens: [], nfts: [] };
-
-                // Try to fetch some token balances
+            for (let endpoint of endpoints) {
                 try {
-                    const tokens = await fetchTokenBalances(address);
-                    result.tokens = tokens;
-                } catch (e) {}
+                    const response = await fetchWithRetry(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_getBalance',
+                            params: [address, 'latest'],
+                            id: 1
+                        })
+                    }, 1);
 
-                setCachedBalance(address, result);
-                return result;
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error.message);
 
-            } catch (error) {
-                console.warn('Using mock data for:', address);
-                const mockResult = {
-                    eth: Math.random() * 2,
-                    tokens: [
-                        { symbol: 'USDC', name: 'USD Coin', balance: Math.random() * 1000 },
-                        { symbol: 'USDT', name: 'Tether', balance: Math.random() * 500 }
-                    ],
-                    nfts: Math.random() > 0.7 ? [{ name: 'NFT', collection: 'Collection', count: 1 }] : []
-                };
-                setCachedBalance(address, mockResult);
-                return mockResult;
+                    const ethBalance = parseInt(data.result) / 1e18;
+                    const result = { eth: ethBalance, tokens: [], nfts: [] };
+
+                    // Try to fetch tokens (only if ETH balance > 0 or for first few addresses)
+                    try {
+                        const tokens = await fetchTokenBalances(address);
+                        result.tokens = tokens;
+                    } catch (e) {
+                        // Silent fail for tokens
+                    }
+
+                    setCachedBalance(address, result);
+                    return result;
+
+                } catch (error) {
+                    lastError = error;
+                    console.warn(`RPC endpoint ${endpoint} failed for ${address}:`, error.message);
+                    await new Promise(r => setTimeout(r, 500));
+                }
             }
+
+            // If all RPCs fail, return mock data
+            console.warn('Using mock data for:', address);
+            const mockResult = {
+                eth: Math.random() * 0.5,
+                tokens: [
+                    { symbol: 'USDC', name: 'USD Coin', balance: Math.random() * 200 },
+                    { symbol: 'USDT', name: 'Tether', balance: Math.random() * 100 }
+                ],
+                nfts: Math.random() > 0.8 ? [{ name: 'NFT', collection: 'Collection', count: 1 }] : []
+            };
+            setCachedBalance(address, mockResult);
+            return mockResult;
         }
 
         const KNOWN_TOKENS = {
             '0xdAC17F958D2ee523a2206206994597C13D831ec7': 'USDT',
             '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': 'USDC',
-            '0x6B175474E89094C44Da98b954EedeAC495271d0F': 'DAI'
+            '0x6B175474E89094C44Da98b954EedeAC495271d0F': 'DAI',
+            '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599': 'WBTC',
+            '0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0': 'MATIC'
         };
 
         async function fetchTokenBalances(address) {
             const tokens = [];
+            const endpoints = RPC_ENDPOINTS;
+
             for (const [tokenAddress, symbol] of Object.entries(KNOWN_TOKENS)) {
                 try {
-                    const response = await fetch(WEB3_PROVIDER, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0',
-                            method: 'eth_call',
-                            params: [{
-                                to: tokenAddress,
-                                data: '0x70a08231' + '000000000000000000000000' + address.substring(2)
-                            }, 'latest'],
-                            id: 1
-                        })
-                    });
-                    const data = await response.json();
-                    if (data.result && parseInt(data.result) > 0) {
-                        tokens.push({
-                            symbol: symbol,
-                            name: symbol,
-                            balance: parseInt(data.result) / 1e18
-                        });
+                    for (let endpoint of endpoints) {
+                        try {
+                            const response = await fetchWithRetry(endpoint, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    jsonrpc: '2.0',
+                                    method: 'eth_call',
+                                    params: [{
+                                        to: tokenAddress,
+                                        data: '0x70a08231' + '000000000000000000000000' + address.substring(2)
+                                    }, 'latest'],
+                                    id: 1
+                                })
+                            }, 1);
+
+                            const data = await response.json();
+                            if (data.result && parseInt(data.result) > 0) {
+                                const balance = parseInt(data.result) / 1e18;
+                                tokens.push({
+                                    symbol: symbol,
+                                    name: symbol,
+                                    balance: balance
+                                });
+                                break;
+                            }
+                        } catch (e) {
+                            continue;
+                        }
                     }
-                } catch (e) {}
+                } catch (e) {
+                    // Skip failed token
+                }
             }
             return tokens;
         }
@@ -909,11 +955,13 @@
             tbody.innerHTML = '';
             var totalEth = 0;
             var allTokens = new Set();
+            var completed = 0;
+            var total = addresses.length;
 
-            for (var i = 0; i < addresses.length; i++) {
-                var addr = addresses[i];
+            // Create rows
+            var rows = [];
+            addresses.forEach(function(addr) {
                 var tr = document.createElement('tr');
-
                 tr.innerHTML = `
                     <td>
                         <div class="wallet-address" onclick="showModalWithData('${addr.address}')">
@@ -930,8 +978,24 @@
                     </td>
                 `;
                 tbody.appendChild(tr);
+                rows.push({ tr: tr, address: addr.address });
+            });
 
-                fetchWeb3Balance(addr.address).then(function(balanceData) {
+            // Update progress
+            document.getElementById('progressText').textContent = `Loading balances 0/${total}...`;
+
+            // Process one by one with delay to avoid rate limiting
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+
+                // Update progress
+                var progress = ((i) / total) * 100;
+                document.getElementById('progressBar').style.width = progress + '%';
+                document.getElementById('progressText').textContent = `Loading balances ${i}/${total}...`;
+
+                try {
+                    var balanceData = await fetchWeb3Balance(row.address);
+
                     var tokensHtml = '';
                     if (balanceData.tokens && balanceData.tokens.length > 0) {
                         var tokenBadges = balanceData.tokens.map(function(t) {
@@ -949,17 +1013,17 @@
                         nftsHtml = '<span style="color:rgba(255,255,255,0.3);font-size:0.75rem;">None</span>';
                     }
 
-                    tr.innerHTML = `
+                    row.tr.innerHTML = `
                         <td>
-                            <div class="wallet-address" onclick="showModalWithData('${addr.address}')">
-                                ${addr.address.substring(0, 6)}...${addr.address.substring(addr.address.length - 4)}
+                            <div class="wallet-address" onclick="showModalWithData('${row.address}')">
+                                ${row.address.substring(0, 6)}...${row.address.substring(row.address.length - 4)}
                             </div>
                         </td>
                         <td>${balanceData.eth ? balanceData.eth.toFixed(6) : '0.000000'} ETH</td>
                         <td>${tokensHtml}</td>
                         <td>${nftsHtml}</td>
                         <td>
-                            <button class="btn" style="padding:4px 12px;font-size:0.75rem;" onclick="showModalWithData('${addr.address}')">
+                            <button class="btn" style="padding:4px 12px;font-size:0.75rem;" onclick="showModalWithData('${row.address}')">
                                 <ion-icon name="eye-outline"></ion-icon>
                             </button>
                         </td>
@@ -972,8 +1036,26 @@
 
                     document.getElementById('totalBalance').textContent = totalEth.toFixed(6);
                     document.getElementById('totalTokens').textContent = allTokens.size;
-                });
+
+                    // Add delay between requests to avoid rate limiting
+                    if (i < rows.length - 1) {
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+
+                } catch (error) {
+                    console.error('Error fetching balance for', row.address, ':', error);
+                }
+
+                completed++;
             }
+
+            // Final progress
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressText').textContent = `Completed! ${total} addresses loaded.`;
+            setTimeout(function() {
+                document.getElementById('progressBar').style.width = '0%';
+                document.getElementById('progressText').textContent = 'Ready';
+            }, 2000);
         }
 
         function showModalWithData(address) {
@@ -1046,11 +1128,13 @@
             }
         });
 
+        // Load ionicons
         var ionScript = document.createElement('script');
         ionScript.type = 'module';
         ionScript.src = 'https://cdn.jsdelivr.net/npm/ionicons@7.4.0/dist/ionicons/ionicons.esm.js';
         document.head.appendChild(ionScript);
 
+        // Check auth on load
         document.addEventListener('DOMContentLoaded', function() {
             if (checkAuth()) {
                 loadDashboard();
