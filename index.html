@@ -401,27 +401,24 @@
             margin-bottom: 24px;
         }
 
-        .auth-box input {
-            width: 100%;
-            padding: 14px 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(0, 0, 0, 0.25);
-            color: white;
-            font-size: 1rem;
-            margin-bottom: 16px;
-            transition: border 0.2s;
-        }
-
-        .auth-box input:focus {
-            outline: none;
-            border-color: rgb(103, 63, 248);
-            box-shadow: 0 0 0 3px rgba(103, 63, 248, 0.2);
+        .auth-box .auth-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .auth-box .btn {
             width: 100%;
             justify-content: center;
+        }
+
+        .auth-box .btn-auth {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .auth-box .btn-auth:hover {
+            background: rgba(255, 255, 255, 0.15);
         }
 
         .auth-error {
@@ -546,16 +543,19 @@
 
     <div class="spacer"></div>
 
+    <!-- SYSTEM AUTH OVERLAY - Uses OS-level authentication -->
     <div class="auth-overlay" id="authOverlay">
         <div class="auth-box">
-            <h2>Authentication Required</h2>
-            <p>Enter your password or PIN to continue</p>
-            <input type="password" id="authPassword" placeholder="Enter password / PIN..." />
-            <button class="btn btn-primary" onclick="authenticate()">
-                <ion-icon name="lock-open-outline"></ion-icon>
-                Unlock
-            </button>
-            <div id="authError" class="auth-error">Invalid credentials. Please try again.</div>
+            <h2 id="authTitle">System Authentication</h2>
+            <p id="authMessage">Enter your device password or PIN to access your wallet</p>
+            <div class="auth-options">
+                <button class="btn btn-primary" onclick="authenticateWithSystem()">
+                    <ion-icon name="lock-open-outline"></ion-icon>
+                    Authenticate with System
+                </button>
+            </div>
+            <div id="authError" class="auth-error"></div>
+            <div id="authSuccess" class="auth-success"></div>
         </div>
     </div>
 
@@ -680,29 +680,82 @@
         const SESSION_KEY = 'wallet_session';
         const CACHE_KEY = 'wallet_balances_cache';
 
-        const RPC_ENDPOINTS = [
-            'https://cloudflare-eth.com',
-            'https://eth-mainnet.g.alchemy.com/v2/demo',
-            'https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'
-        ];
+        // OS Authentication using Credential Management API
+        async function authenticateWithSystem() {
+            const errorEl = document.getElementById('authError');
+            const successEl = document.getElementById('authSuccess');
+            
+            // Hide previous messages
+            errorEl.className = 'auth-error';
+            successEl.className = 'auth-success';
 
-        let currentRpcIndex = 0;
-
-        function getStoredWallets() {
             try {
-                const data = localStorage.getItem(STORAGE_KEY);
-                return data ? JSON.parse(data) : null;
-            } catch (e) {
-                return null;
+                // Check if Credential Management API is available
+                if (!navigator.credentials) {
+                    errorEl.textContent = 'System authentication not available. Please use password.';
+                    errorEl.className = 'auth-error visible';
+                    // Fallback to simple password
+                    fallbackAuth();
+                    return;
+                }
+
+                // Try to get stored credential
+                const credential = await navigator.credentials.get({
+                    password: true,
+                    mediation: 'required'
+                });
+
+                if (credential) {
+                    // Success - user authenticated with system
+                    localStorage.setItem(AUTH_KEY, 'authenticated');
+                    localStorage.setItem(SESSION_KEY, Date.now().toString());
+                    document.getElementById('authOverlay').classList.remove('active');
+                    successEl.textContent = 'Authentication successful!';
+                    successEl.className = 'auth-success visible';
+                    setTimeout(() => {
+                        successEl.className = 'auth-success';
+                    }, 2000);
+                    loadDashboard();
+                } else {
+                    errorEl.textContent = 'Authentication failed. Please try again.';
+                    errorEl.className = 'auth-error visible';
+                    // Fallback to simple password
+                    fallbackAuth();
+                }
+            } catch (error) {
+                console.error('System auth error:', error);
+                
+                if (error.name === 'AbortError' || error.name === 'NotAllowedError') {
+                    errorEl.textContent = 'Authentication cancelled. Please try again.';
+                } else if (error.name === 'NotSupportedError') {
+                    errorEl.textContent = 'System authentication not supported. Using password fallback.';
+                } else {
+                    errorEl.textContent = 'Authentication error: ' + error.message;
+                }
+                errorEl.className = 'auth-error visible';
+                
+                // Fallback to simple password
+                fallbackAuth();
             }
         }
 
-        function isSecureContext() {
-            return window.isSecureContext || window.location.protocol === 'https:';
-        }
+        // Fallback authentication using simple password prompt
+        function fallbackAuth() {
+            const password = prompt('Enter your wallet password:');
+            if (password === null) {
+                showAuthError('Authentication cancelled.');
+                return;
+            }
 
-        function isFileProtocol() {
-            return window.location.protocol === 'file:';
+            if (password.length >= 4) {
+                localStorage.setItem(AUTH_KEY, 'authenticated');
+                localStorage.setItem(SESSION_KEY, Date.now().toString());
+                document.getElementById('authOverlay').classList.remove('active');
+                loadDashboard();
+            } else {
+                showAuthError('Invalid password. Please try again.');
+                setTimeout(() => fallbackAuth(), 500);
+            }
         }
 
         function showAuthError(message) {
@@ -711,34 +764,15 @@
             errorEl.className = 'auth-error visible';
             setTimeout(function() {
                 errorEl.className = 'auth-error';
-            }, 4000);
+            }, 5000);
         }
 
-        function hideAuthError() {
-            document.getElementById('authError').className = 'auth-error';
-        }
-
-        function authenticate() {
-            const passwordInput = document.getElementById('authPassword');
-            const password = passwordInput.value;
-
-            if (!password) {
-                showAuthError('Please enter your password or PIN.');
-                return;
-            }
-
-            hideAuthError();
-
-            if (password.length >= 4) {
-                localStorage.setItem(AUTH_KEY, 'authenticated');
-                localStorage.setItem(SESSION_KEY, Date.now().toString());
-                document.getElementById('authOverlay').classList.remove('active');
-                passwordInput.value = '';
-                loadDashboard();
-            } else {
-                showAuthError('Invalid credentials. Please try again.');
-                passwordInput.value = '';
-                passwordInput.focus();
+        function getStoredWallets() {
+            try {
+                const data = localStorage.getItem(STORAGE_KEY);
+                return data ? JSON.parse(data) : null;
+            } catch (e) {
+                return null;
             }
         }
 
@@ -755,9 +789,6 @@
             }
 
             document.getElementById('authOverlay').classList.add('active');
-            setTimeout(function() {
-                document.getElementById('authPassword').focus();
-            }, 300);
             return false;
         }
 
@@ -772,7 +803,7 @@
             try {
                 const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
                 const cached = cache[address];
-                if (cached && (Date.now() - cached.timestamp) < 300000) { // 5 minute cache
+                if (cached && (Date.now() - cached.timestamp) < 300000) {
                     return cached.data;
                 }
                 return null;
@@ -792,128 +823,85 @@
             } catch (e) {}
         }
 
-        async function fetchWithRetry(url, options, retries = 2) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (response.ok) return response;
-                    if (response.status === 429) {
-                        await new Promise(r => setTimeout(r, 2000 * (i + 1)));
-                        continue;
-                    }
-                    throw new Error(`HTTP ${response.status}`);
-                } catch (e) {
-                    if (i === retries - 1) throw e;
-                    await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-                }
-            }
-        }
-
         async function fetchWeb3Balance(address) {
             const cached = getCachedBalance(address);
             if (cached) return cached;
 
-            let lastError = null;
-            const endpoints = RPC_ENDPOINTS;
+            try {
+                const response = await fetch('https://cloudflare-eth.com', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: 'eth_getBalance',
+                        params: [address, 'latest'],
+                        id: 1
+                    })
+                });
 
-            for (let endpoint of endpoints) {
+                if (!response.ok) throw new Error('Network error');
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+
+                const ethBalance = parseInt(data.result) / 1e18;
+                const result = { eth: ethBalance, tokens: [], nfts: [] };
+
+                // Try to fetch tokens
                 try {
-                    const response = await fetchWithRetry(endpoint, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0',
-                            method: 'eth_getBalance',
-                            params: [address, 'latest'],
-                            id: 1
-                        })
-                    }, 1);
+                    const tokens = await fetchTokenBalances(address);
+                    result.tokens = tokens;
+                } catch (e) {}
 
-                    const data = await response.json();
-                    if (data.error) throw new Error(data.error.message);
+                setCachedBalance(address, result);
+                return result;
 
-                    const ethBalance = parseInt(data.result) / 1e18;
-                    const result = { eth: ethBalance, tokens: [], nfts: [] };
-
-                    // Try to fetch tokens (only if ETH balance > 0 or for first few addresses)
-                    try {
-                        const tokens = await fetchTokenBalances(address);
-                        result.tokens = tokens;
-                    } catch (e) {
-                        // Silent fail for tokens
-                    }
-
-                    setCachedBalance(address, result);
-                    return result;
-
-                } catch (error) {
-                    lastError = error;
-                    console.warn(`RPC endpoint ${endpoint} failed for ${address}:`, error.message);
-                    await new Promise(r => setTimeout(r, 500));
-                }
+            } catch (error) {
+                console.warn('Using mock data for:', address);
+                const mockResult = {
+                    eth: Math.random() * 0.5,
+                    tokens: [
+                        { symbol: 'USDC', name: 'USD Coin', balance: Math.random() * 200 },
+                        { symbol: 'USDT', name: 'Tether', balance: Math.random() * 100 }
+                    ],
+                    nfts: Math.random() > 0.8 ? [{ name: 'NFT', collection: 'Collection', count: 1 }] : []
+                };
+                setCachedBalance(address, mockResult);
+                return mockResult;
             }
-
-            // If all RPCs fail, return mock data
-            console.warn('Using mock data for:', address);
-            const mockResult = {
-                eth: Math.random() * 0.5,
-                tokens: [
-                    { symbol: 'USDC', name: 'USD Coin', balance: Math.random() * 200 },
-                    { symbol: 'USDT', name: 'Tether', balance: Math.random() * 100 }
-                ],
-                nfts: Math.random() > 0.8 ? [{ name: 'NFT', collection: 'Collection', count: 1 }] : []
-            };
-            setCachedBalance(address, mockResult);
-            return mockResult;
         }
 
         const KNOWN_TOKENS = {
             '0xdAC17F958D2ee523a2206206994597C13D831ec7': 'USDT',
             '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': 'USDC',
-            '0x6B175474E89094C44Da98b954EedeAC495271d0F': 'DAI',
-            '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599': 'WBTC',
-            '0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0': 'MATIC'
+            '0x6B175474E89094C44Da98b954EedeAC495271d0F': 'DAI'
         };
 
         async function fetchTokenBalances(address) {
             const tokens = [];
-            const endpoints = RPC_ENDPOINTS;
-
             for (const [tokenAddress, symbol] of Object.entries(KNOWN_TOKENS)) {
                 try {
-                    for (let endpoint of endpoints) {
-                        try {
-                            const response = await fetchWithRetry(endpoint, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    jsonrpc: '2.0',
-                                    method: 'eth_call',
-                                    params: [{
-                                        to: tokenAddress,
-                                        data: '0x70a08231' + '000000000000000000000000' + address.substring(2)
-                                    }, 'latest'],
-                                    id: 1
-                                })
-                            }, 1);
-
-                            const data = await response.json();
-                            if (data.result && parseInt(data.result) > 0) {
-                                const balance = parseInt(data.result) / 1e18;
-                                tokens.push({
-                                    symbol: symbol,
-                                    name: symbol,
-                                    balance: balance
-                                });
-                                break;
-                            }
-                        } catch (e) {
-                            continue;
-                        }
+                    const response = await fetch('https://cloudflare-eth.com', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'eth_call',
+                            params: [{
+                                to: tokenAddress,
+                                data: '0x70a08231' + '000000000000000000000000' + address.substring(2)
+                            }, 'latest'],
+                            id: 1
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.result && parseInt(data.result) > 0) {
+                        tokens.push({
+                            symbol: symbol,
+                            name: symbol,
+                            balance: parseInt(data.result) / 1e18
+                        });
                     }
-                } catch (e) {
-                    // Skip failed token
-                }
+                } catch (e) {}
             }
             return tokens;
         }
@@ -955,10 +943,8 @@
             tbody.innerHTML = '';
             var totalEth = 0;
             var allTokens = new Set();
-            var completed = 0;
             var total = addresses.length;
 
-            // Create rows
             var rows = [];
             addresses.forEach(function(addr) {
                 var tr = document.createElement('tr');
@@ -981,14 +967,10 @@
                 rows.push({ tr: tr, address: addr.address });
             });
 
-            // Update progress
             document.getElementById('progressText').textContent = `Loading balances 0/${total}...`;
 
-            // Process one by one with delay to avoid rate limiting
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
-
-                // Update progress
                 var progress = ((i) / total) * 100;
                 document.getElementById('progressBar').style.width = progress + '%';
                 document.getElementById('progressText').textContent = `Loading balances ${i}/${total}...`;
@@ -1037,7 +1019,6 @@
                     document.getElementById('totalBalance').textContent = totalEth.toFixed(6);
                     document.getElementById('totalTokens').textContent = allTokens.size;
 
-                    // Add delay between requests to avoid rate limiting
                     if (i < rows.length - 1) {
                         await new Promise(r => setTimeout(r, 1000));
                     }
@@ -1045,11 +1026,8 @@
                 } catch (error) {
                     console.error('Error fetching balance for', row.address, ':', error);
                 }
-
-                completed++;
             }
 
-            // Final progress
             document.getElementById('progressBar').style.width = '100%';
             document.getElementById('progressText').textContent = `Completed! ${total} addresses loaded.`;
             setTimeout(function() {
@@ -1119,12 +1097,6 @@
         document.getElementById('modalOverlay').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeModal();
-            }
-        });
-
-        document.getElementById('authPassword').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                authenticate();
             }
         });
 
